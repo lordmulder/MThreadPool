@@ -34,6 +34,10 @@ namespace MTHREADPOOL_NS
 {
 	class MTHREADPOOL_DLL ITask
 	{
+	public:
+		ITask(void) {}
+		virtual ~ITask(void) {}
+
 	protected:
 		virtual void run(void) = 0;
 	};
@@ -41,6 +45,9 @@ namespace MTHREADPOOL_NS
 	class MTHREADPOOL_DLL IPool
 	{
 	public:
+		IPool(void) {}
+		virtual ~IPool(void) {}
+
 		virtual bool schedule(ITask *const task) = 0;
 		virtual bool trySchedule(ITask *const task) = 0;
 	};

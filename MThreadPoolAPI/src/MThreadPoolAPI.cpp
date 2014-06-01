@@ -5,11 +5,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "MThreadPoolAPI.h"
+#include "ThreadPool.h"
 
 using namespace MTHREADPOOL_NS;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Version info
+// Constants
 ///////////////////////////////////////////////////////////////////////////////
 
 static const uint32_t MTHREADPOOL_VERSION_MAJOR = 1;
@@ -30,7 +31,18 @@ static const bool MTHREADPOOL_VERSION_DEBUG = true;
 
 IPool *MTHREADPOOL_NS::allocatePool(const uint32_t &nThreads)
 {
-	return NULL;
+	IPool *pool = NULL;
+
+	try
+	{
+		pool = new ThreadPool(nThreads);
+	}
+	catch(...)
+	{
+		pool = NULL;
+	}
+
+	return pool;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
