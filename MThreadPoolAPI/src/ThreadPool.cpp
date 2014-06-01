@@ -46,7 +46,7 @@ ThreadPool::~ThreadPool(void)
 {
 	//Do we still have any running/pending tasks?
 	MTHREAD_MUTEX_LOCK(&m_lock);
-	while((!m_taskQueue.empty()) || (m_runningTasks > 0))
+	if((!m_taskQueue.empty()) || (m_runningTasks > 0))
 	{
 		LOG("Warning: Destructor called while still have running/pending tasks!");
 	}

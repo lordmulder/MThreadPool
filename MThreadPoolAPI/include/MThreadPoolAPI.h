@@ -38,7 +38,7 @@ namespace MTHREADPOOL_NS
 		ITask(void) {}
 		virtual ~ITask(void) {}
 
-		virtual void run(void) = 0;
+		virtual void run(void) = 0; // <-- Must be implemented in user code!
 	};
 
 	class MTHREADPOOL_DLL IPool
@@ -62,7 +62,7 @@ namespace MTHREADPOOL_NS
 {
 	IPool MTHREADPOOL_DLL *allocatePool(const uint32_t &nThreads = 0);
 	bool MTHREADPOOL_DLL destroyPool(IPool *pool);
-	const char* getVersionInfo(uint32_t &vMajor, uint32_t &vMinor, uint32_t &vPatch, bool &bDebug);
+	const char MTHREADPOOL_DLL *getVersionInfo(uint32_t &vMajor, uint32_t &vMinor, uint32_t &vPatch, bool &bDebug);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
