@@ -38,7 +38,6 @@ namespace MTHREADPOOL_NS
 		ITask(void) {}
 		virtual ~ITask(void) {}
 
-	protected:
 		virtual void run(void) = 0;
 	};
 
@@ -50,6 +49,8 @@ namespace MTHREADPOOL_NS
 
 		virtual bool schedule(ITask *const task) = 0;
 		virtual bool trySchedule(ITask *const task) = 0;
+
+		virtual bool wait(void) = 0;
 	};
 }
 
