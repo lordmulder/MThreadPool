@@ -16,27 +16,40 @@ using namespace MTHREADPOOL_NS;
 // Constructor & Destructor
 ///////////////////////////////////////////////////////////////////////////////
 
-ThreadPool::ThreadPool(const uint32_t &nThreads)
+ThreadPool::ThreadPool(const uint32_t &threadCount, const uint32_t &maxQueueLength)
 :
-	m_nThreads(nThreads)
+	m_threadCount(threadCount),
+	m_maxQueueLength(std::max((maxQueueLength ? maxQueueLength : (4 * m_threadCount)), m_threadCount))
 {
+	//LOG("m_threadCount: %u", m_threadCount);
+	//LOG("m_maxQueueLength: %u", m_maxQueueLength);
+	
 	m_bStopFlag = false;
 	m_runningTasks = 0;
+	m_nextCondIndex = 0;
 
 	//Create the lock
 	MTHREAD_MUTEX_INIT(&m_lock);
 
 	//Create semaphores
-	MTHREAD_SEM_INIT(&m_semFree, nThreads);
+	MTHREAD_SEM_INIT(&m_semFree, m_maxQueueLength);
 	MTHREAD_SEM_INIT(&m_semUsed, 0);
 
-	//Create conditional var
-	MTHREAD_COND_INIT(&m_condDone);
+	//Create global conditional var
+	MTHREAD_COND_INIT(&m_condAllDone);
 
-	//Allocate threads
-	m_threads = new pthread_t[nThreads];
-	memset(m_threads, 0, sizeof(pthread_t) * nThreads);
-	for(uint32_t i = 0; i < nThreads; i++)
+	//Allocate per-task conditional vars
+	m_condTaskDone = new pthread_cond_t[m_threadCount + m_maxQueueLength];
+	memset(m_condTaskDone, 0, sizeof(pthread_cond_t) * (m_threadCount + m_maxQueueLength));
+	for(uint32_t i = 0; i < (m_threadCount + m_maxQueueLength); i++)
+	{
+		MTHREAD_COND_INIT(&m_condTaskDone[i]);
+	}
+
+	//Create the threads
+	m_threads = new pthread_t[m_threadCount];
+	memset(m_threads, 0, sizeof(pthread_t) * m_threadCount);
+	for(uint32_t i = 0; i < m_threadCount; i++)
 	{
 		MTHREAD_CREATE(&m_threads[i], NULL, entryPoint, this);
 	}
@@ -54,28 +67,45 @@ ThreadPool::~ThreadPool(void)
 
 	//Stop all running threads!
 	m_bStopFlag = true;
-	MTHREAD_SEM_POST(&m_semUsed, m_nThreads);
+	MTHREAD_SEM_POST(&m_semUsed, m_threadCount);
 
 	//Wait for threads to exit
-	for(uint32_t i = 0; i < m_nThreads; i++)
+	for(uint32_t i = 0; i < m_threadCount; i++)
 	{
 		MTHREAD_JOIN(m_threads[i]);
 	}
 
-	//Clear thread data
-	memset(m_threads, 0, sizeof(pthread_t) * m_nThreads);
+	//Delete thread array
+	if(m_threads)
+	{
+		delete [] m_threads;
+		m_threads = NULL;
+	}
 
-	//Create semaphores
-	MTHREAD_SEM_DESTROY(&m_semFree);
-	MTHREAD_SEM_DESTROY(&m_semUsed);
+	//Destroy conditional vars
+	for(uint32_t i = 0; i < (m_threadCount + m_maxQueueLength); i++)
+	{
+		MTHREAD_COND_DESTROY(&m_condTaskDone[i]);
+	}
+
+	//Delete conditional var array
+	if(m_condTaskDone)
+	{
+		delete [] m_condTaskDone;
+		m_condTaskDone = NULL;
+	}
 
 	//Destroy conditional var
-	MTHREAD_COND_DESTROY(&m_condDone);
+	MTHREAD_COND_DESTROY(&m_condAllDone);
+
+	//Destroy semaphores
+	MTHREAD_SEM_DESTROY(&m_semFree);
+	MTHREAD_SEM_DESTROY(&m_semUsed);
 
 	//Destroy the lock
 	MTHREAD_MUTEX_DESTROY(&m_lock);
 
-	//Clear pending tasks, if any
+	//Clear pending tasks
 	std::queue<MTHREADPOOL_NS::ITask*> empty;
 	m_taskQueue.swap(empty);
 }
@@ -91,11 +121,19 @@ bool ThreadPool::schedule(ITask *const task)
 		MTHREAD_SEM_WAIT(&m_semFree);
 		MTHREAD_MUTEX_LOCK(&m_lock);
 
-		m_taskQueue.push(task);
+		if(m_taskList.find(task) == m_taskList.end())
+		{
+			m_taskList.insert(std::make_pair(task, &m_condTaskDone[m_nextCondIndex]));
+			m_nextCondIndex = (m_nextCondIndex + 1) % (m_threadCount + m_maxQueueLength);
+			m_taskQueue.push(task);
+			MTHREAD_SEM_POST(&m_semUsed);
+		}
+		else
+		{
+			LOG("Task %p has already been scheduled!", task);
+		}
 
 		MTHREAD_MUTEX_UNLOCK(&m_lock);
-		MTHREAD_SEM_POST(&m_semUsed);
-
 		return true;
 	}
 	catch(std::exception &e)
@@ -118,11 +156,19 @@ bool ThreadPool::trySchedule(ITask *const task)
 		{
 			MTHREAD_MUTEX_LOCK(&m_lock);
 
-			m_taskQueue.push(task);
+			if(m_taskList.find(task) == m_taskList.end())
+			{
+				m_taskList.insert(std::make_pair(task, &m_condTaskDone[m_nextCondIndex]));
+				m_nextCondIndex = (m_nextCondIndex + 1) % (m_threadCount + m_maxQueueLength);
+				m_taskQueue.push(task);
+				MTHREAD_SEM_POST(&m_semUsed);
+			}
+			else
+			{
+				LOG("Task %p has already been scheduled!", task);
+			}
 
 			MTHREAD_MUTEX_UNLOCK(&m_lock);
-			MTHREAD_SEM_POST(&m_semUsed);
-
 			return true;
 		}
 		else
@@ -155,11 +201,10 @@ bool ThreadPool::wait(void)
 
 		while((!m_taskQueue.empty()) || (m_runningTasks > 0))
 		{
-			MTHREAD_COND_WAIT(&m_condDone, &m_lock);
+			MTHREAD_COND_WAIT(&m_condAllDone, &m_lock);
 		}
 
 		MTHREAD_MUTEX_UNLOCK(&m_lock);
-
 		return true;
 	}
 	catch(std::exception &e)
@@ -172,7 +217,35 @@ bool ThreadPool::wait(void)
 		LOG("Unknown exception error!");
 		return false;
 	}
+}
 
+bool ThreadPool::wait(MTHREADPOOL_NS::ITask *const task)
+{
+	try
+	{
+		MTHREAD_MUTEX_LOCK(&m_lock);
+		
+		std::unordered_map<ITask*,pthread_cond_t*>::iterator iter = m_taskList.find(task);
+
+		while(iter != m_taskList.end())
+		{
+			MTHREAD_COND_WAIT(iter->second, &m_lock);
+			iter = m_taskList.find(task);
+		}
+
+		MTHREAD_MUTEX_UNLOCK(&m_lock);
+		return true;
+	}
+	catch(std::exception &e)
+	{
+		LOG("Exception error: %s", e.what());
+		return false;
+	}
+	catch(...)
+	{
+		LOG("Unknown exception error!");
+		return false;
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -235,9 +308,17 @@ void *ThreadPool::entryPoint(void *arg)
 				MTHREAD_MUTEX_LOCK(&pool->m_lock);
 			
 				pool->m_runningTasks--;
+				std::unordered_map<ITask*,pthread_cond_t*>::iterator iter = pool->m_taskList.find(task);
+
+				if(iter != pool->m_taskList.end())
+				{
+					MTHREAD_COND_BROADCAST(iter->second);
+					pool->m_taskList.erase(iter);
+				}
+
 				if(pool->m_runningTasks == 0)
 				{
-					MTHREAD_COND_BROADCAST(&pool->m_condDone);
+					MTHREAD_COND_BROADCAST(&pool->m_condAllDone);
 				}
 
 				MTHREAD_MUTEX_UNLOCK(&pool->m_lock);

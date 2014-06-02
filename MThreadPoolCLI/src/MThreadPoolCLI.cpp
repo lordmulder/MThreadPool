@@ -57,6 +57,7 @@ protected:
 int wmain(int argc, wchar_t* argv[])
 {
 	static const int MAX_RUNS = 1000;
+	static const int TASK_COUNT = 256;
 
 	uint32_t vMajor, vMinor, vPatch;
 	bool bDebug;
@@ -65,35 +66,38 @@ int wmain(int argc, wchar_t* argv[])
 	printf("MThreadPool Test [%s]\n\n", __DATE__);
 	printf("Using MThreadPool library v%u.%02u-%u, built on %s, %s\n\n", vMajor, vMinor, vPatch, date, bDebug ? "Debug" : "Release");
 	
+	MyTask **tasks = new MyTask*[TASK_COUNT];
+	for(int i = 0; i < TASK_COUNT; i++)
+	{
+		tasks[i] = new MyTask(i);
+	}
+
 	for(int j = 0; j < MAX_RUNS; j++)
 	{
 		printf("[Run %d of %d]\n", j+1, MAX_RUNS);
 
-		std::queue<MTHREADPOOL_NS::ITask*> tasks;
 		MTHREADPOOL_NS::IPool *pool = MTHREADPOOL_NS::allocatePool(4);
 
-		for(int i = 0; i < 256; i++)
+		for(int i = 0; i < TASK_COUNT; i++)
 		{
-			tasks.push(new MyTask(i));
-			if(!pool->schedule(tasks.back()))
+			if(!pool->schedule(tasks[i]))
 			{
 				printf("Scheduling has failed!\n");
 			}
 		}
 
+		printf("Synchronizing...\n");
 		pool->wait();
-
 		MTHREADPOOL_NS::destroyPool(pool);
-
-		while(tasks.empty())
-		{
-			MTHREADPOOL_NS::ITask *t = tasks.front();
-			tasks.pop();
-			delete t;
-		}
 
 		printf("\n--------\n\n");
 	}
+
+	for(int i = 0; i < TASK_COUNT; i++)
+	{
+		delete tasks[i];
+	}
+	delete [] tasks;
 
 	printf("\nDone.\n");
 	return 0;

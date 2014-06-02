@@ -47,10 +47,11 @@ namespace MTHREADPOOL_NS
 		IPool(void) {}
 		virtual ~IPool(void) {}
 
-		virtual bool schedule(ITask *const task) = 0;
-		virtual bool trySchedule(ITask *const task) = 0;
+		virtual bool schedule(MTHREADPOOL_NS::ITask *const task) = 0;
+		virtual bool trySchedule(MTHREADPOOL_NS::ITask *const task) = 0;
 
 		virtual bool wait(void) = 0;
+		virtual bool wait(MTHREADPOOL_NS::ITask *const task) = 0;
 	};
 }
 
@@ -60,7 +61,7 @@ namespace MTHREADPOOL_NS
 
 namespace MTHREADPOOL_NS
 {
-	IPool MTHREADPOOL_DLL *allocatePool(const uint32_t &nThreads = 0);
+	IPool MTHREADPOOL_DLL *allocatePool(const uint32_t &threadCount = 0, const uint32_t &maxQueueLength = 0);
 	bool MTHREADPOOL_DLL destroyPool(IPool *pool);
 	const char MTHREADPOOL_DLL *getVersionInfo(uint32_t &vMajor, uint32_t &vMinor, uint32_t &vPatch, bool &bDebug);
 }

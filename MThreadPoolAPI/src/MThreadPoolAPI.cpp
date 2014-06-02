@@ -14,7 +14,7 @@ using namespace MTHREADPOOL_NS;
 ///////////////////////////////////////////////////////////////////////////////
 
 static const uint32_t MTHREADPOOL_VERSION_MAJOR = 1;
-static const uint32_t MTHREADPOOL_VERSION_MINOR = 0;
+static const uint32_t MTHREADPOOL_VERSION_MINOR = 1;
 static const uint32_t MTHREADPOOL_VERSION_PATCH = 0;
 
 static const char *MTHREADPOOL_VERSION_DATE = __DATE__;
@@ -29,13 +29,13 @@ static const bool MTHREADPOOL_VERSION_DEBUG = true;
 // Allocate new pool
 ///////////////////////////////////////////////////////////////////////////////
 
-IPool *MTHREADPOOL_NS::allocatePool(const uint32_t &nThreads)
+IPool *MTHREADPOOL_NS::allocatePool(const uint32_t &threadCount, const uint32_t &maxQueueLength)
 {
 	IPool *pool = NULL;
 
 	try
 	{
-		pool = new ThreadPool(nThreads);
+		pool = new ThreadPool(threadCount, maxQueueLength);
 	}
 	catch(...)
 	{
