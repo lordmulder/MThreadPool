@@ -6,6 +6,8 @@
 
 #include "ThreadPool.h"
 
+#include "PlatformSupport.h"
+
 #include <cstdio>
 
 using namespace MTHREADPOOL_NS;
@@ -18,7 +20,7 @@ using namespace MTHREADPOOL_NS;
 
 ThreadPool::ThreadPool(const uint32_t &threadCount, const uint32_t &maxQueueLength)
 :
-	m_threadCount(threadCount),
+	m_threadCount(threadCount ? threadCount : getNumberOfProcessors()),
 	m_maxQueueLength(std::max((maxQueueLength ? maxQueueLength : (4 * m_threadCount)), m_threadCount))
 {
 	//LOG("m_threadCount: %u", m_threadCount);

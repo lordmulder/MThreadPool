@@ -1,0 +1,14 @@
+///////////////////////////////////////////////////////////////////////////////
+// MThreadPool - MuldeR's Thread Pool
+// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>
+// All rights reserved.
+///////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include "MThreadPoolAPI.h"
+
+namespace MTHREADPOOL_NS
+{
+	uint32_t getNumberOfProcessors(void);
+}

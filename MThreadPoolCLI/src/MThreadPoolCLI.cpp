@@ -56,7 +56,7 @@ protected:
 
 int wmain(int argc, wchar_t* argv[])
 {
-	static const int MAX_RUNS = 1000;
+	static const int MAX_RUNS = 8;
 	static const int TASK_COUNT = 256;
 
 	uint32_t vMajor, vMinor, vPatch;
@@ -76,7 +76,7 @@ int wmain(int argc, wchar_t* argv[])
 	{
 		printf("[Run %d of %d]\n", j+1, MAX_RUNS);
 
-		MTHREADPOOL_NS::IPool *pool = MTHREADPOOL_NS::allocatePool(4);
+		MTHREADPOOL_NS::IPool *pool = MTHREADPOOL_NS::allocatePool();
 
 		for(int i = 0; i < TASK_COUNT; i++)
 		{

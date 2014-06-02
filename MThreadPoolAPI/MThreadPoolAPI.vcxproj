@@ -13,10 +13,12 @@
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
     <ClCompile Include="src\MThreadPoolAPI.cpp" />
+    <ClCompile Include="src\PlatformSupport.cpp" />
     <ClCompile Include="src\ThreadPool.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\MThreadPoolAPI.h" />
+    <ClInclude Include="src\PlatformSupport.h" />
     <ClInclude Include="src\ThreadPool.h" />
     <ClInclude Include="src\ThreadUtils.h" />
   </ItemGroup>
