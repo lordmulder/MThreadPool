@@ -12,6 +12,10 @@
 #include <cstring>
 #include <queue>
 
+#ifdef _WIN32
+#include <vld.h>
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 // Task
 ///////////////////////////////////////////////////////////////////////////////
@@ -36,7 +40,7 @@ public:
 
 		memcpy(temp, &m_seed, sizeof(uint32_t));
 
-		for(int i = 0; i < 8*SHRT_MAX; i++)
+		for(int i = 0; i < 1024; i++) //8*SHRT_MAX
 		{
 			sha1::calc(temp, 20, hash);
 			memcpy(temp, hash, 20 * sizeof(unsigned char));

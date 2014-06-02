@@ -10,6 +10,10 @@
 
 #include <cstdio>
 
+#ifdef _WIN32
+#include <vld.h>
+#endif
+
 using namespace MTHREADPOOL_NS;
 
 #define LOG(X, ...) fprintf(stderr, "[MThreadPool] " X "\n", __VA_ARGS__)
