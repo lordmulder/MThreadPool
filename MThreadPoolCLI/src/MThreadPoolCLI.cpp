@@ -1,7 +1,24 @@
 ///////////////////////////////////////////////////////////////////////////////
 // MThreadPool - MuldeR's Thread Pool
-// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>
-// All rights reserved.
+// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>. All rights reserved.
+// http://www.muldersoft.com/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version, but always including the *additional*
+// restrictions defined in the "License.txt" file.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+// http://www.gnu.org/licenses/gpl-2.0.txt
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <cstdio>
@@ -19,6 +36,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Task
 ///////////////////////////////////////////////////////////////////////////////
+
+#ifdef NDEBUG
+static const int TASK_LOOPS = 524288;
+#else
+static const int TASK_LOOPS = 4096;
+#endif
 
 class MyTask : public MTHREADPOOL_NS::ITask
 {
@@ -40,7 +63,7 @@ public:
 
 		memcpy(temp, &m_seed, sizeof(uint32_t));
 
-		for(int i = 0; i < 1024; i++) //8*SHRT_MAX
+		for(int i = 0; i < TASK_LOOPS; i++)
 		{
 			sha1::calc(temp, 20, hash);
 			memcpy(temp, hash, 20 * sizeof(unsigned char));
@@ -52,6 +75,24 @@ public:
 
 protected:
 	const uint32_t m_seed;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Listener
+///////////////////////////////////////////////////////////////////////////////
+
+class MyListener : public MTHREADPOOL_NS::IListener
+{
+public:
+	virtual void taskLaunched(MTHREADPOOL_NS::ITask *const task)
+	{
+		printf("Task %p started.\n", task);
+	}
+
+	virtual void taskFinished(MTHREADPOOL_NS::ITask *const task)
+	{
+		printf("Task %p finished.\n", task);
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -70,6 +111,8 @@ int wmain(int argc, wchar_t* argv[])
 	printf("MThreadPool Test [%s]\n\n", __DATE__);
 	printf("Using MThreadPool library v%u.%02u-%u, built on %s, %s\n\n", vMajor, vMinor, vPatch, date, bDebug ? "Debug" : "Release");
 	
+	MyListener listener;
+
 	MyTask **tasks = new MyTask*[TASK_COUNT];
 	for(int i = 0; i < TASK_COUNT; i++)
 	{
@@ -81,6 +124,7 @@ int wmain(int argc, wchar_t* argv[])
 		printf("[Run %d of %d]\n", j+1, MAX_RUNS);
 
 		MTHREADPOOL_NS::IPool *pool = MTHREADPOOL_NS::allocatePool();
+		pool->addListener(&listener);
 
 		for(int i = 0; i < TASK_COUNT; i++)
 		{
@@ -92,6 +136,8 @@ int wmain(int argc, wchar_t* argv[])
 
 		printf("Synchronizing...\n");
 		pool->wait();
+
+		pool->removeListener(&listener);
 		MTHREADPOOL_NS::destroyPool(pool);
 
 		printf("\n--------\n\n");

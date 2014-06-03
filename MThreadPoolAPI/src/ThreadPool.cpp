@@ -1,7 +1,24 @@
 ///////////////////////////////////////////////////////////////////////////////
 // MThreadPool - MuldeR's Thread Pool
-// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>
-// All rights reserved.
+// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>. All rights reserved.
+// http://www.muldersoft.com/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version, but always including the *additional*
+// restrictions defined in the "License.txt" file.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+// http://www.gnu.org/licenses/gpl-2.0.txt
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "ThreadPool.h"
@@ -34,8 +51,9 @@ ThreadPool::ThreadPool(const uint32_t &threadCount, const uint32_t &maxQueueLeng
 	m_runningTasks = 0;
 	m_nextCondIndex = 0;
 
-	//Create the lock
-	MTHREAD_MUTEX_INIT(&m_lock);
+	//Create the locks
+	MTHREAD_MUTEX_INIT(&m_lockTask);
+	MTHREAD_MUTEX_INIT(&m_lockListeners);
 
 	//Create semaphores
 	MTHREAD_SEM_INIT(&m_semFree, m_maxQueueLength);
@@ -63,13 +81,15 @@ ThreadPool::ThreadPool(const uint32_t &threadCount, const uint32_t &maxQueueLeng
 
 ThreadPool::~ThreadPool(void)
 {
+	MTHREAD_MUTEX_LOCK(&m_lockTask);
+
 	//Do we still have any running/pending tasks?
-	MTHREAD_MUTEX_LOCK(&m_lock);
 	if((!m_taskQueue.empty()) || (m_runningTasks > 0))
 	{
 		LOG("Warning: Destructor called while still have running/pending tasks!");
 	}
-	MTHREAD_MUTEX_UNLOCK(&m_lock);
+
+	MTHREAD_MUTEX_UNLOCK(&m_lockTask);
 
 	//Stop all running threads!
 	m_bStopFlag = true;
@@ -109,7 +129,8 @@ ThreadPool::~ThreadPool(void)
 	MTHREAD_SEM_DESTROY(&m_semUsed);
 
 	//Destroy the lock
-	MTHREAD_MUTEX_DESTROY(&m_lock);
+	MTHREAD_MUTEX_DESTROY(&m_lockTask);
+	MTHREAD_MUTEX_DESTROY(&m_lockListeners);
 
 	//Clear pending tasks
 	std::queue<MTHREADPOOL_NS::ITask*> empty;
@@ -125,7 +146,7 @@ bool ThreadPool::schedule(ITask *const task)
 	try
 	{
 		MTHREAD_SEM_WAIT(&m_semFree);
-		MTHREAD_MUTEX_LOCK(&m_lock);
+		MTHREAD_MUTEX_LOCK(&m_lockTask);
 
 		if(m_taskList.find(task) == m_taskList.end())
 		{
@@ -139,7 +160,7 @@ bool ThreadPool::schedule(ITask *const task)
 			LOG("Task %p has already been scheduled!", task);
 		}
 
-		MTHREAD_MUTEX_UNLOCK(&m_lock);
+		MTHREAD_MUTEX_UNLOCK(&m_lockTask);
 		return true;
 	}
 	catch(std::exception &e)
@@ -160,7 +181,7 @@ bool ThreadPool::trySchedule(ITask *const task)
 	{
 		if(MTHREAD_SEM_TRYWAIT(&m_semFree))
 		{
-			MTHREAD_MUTEX_LOCK(&m_lock);
+			MTHREAD_MUTEX_LOCK(&m_lockTask);
 
 			if(m_taskList.find(task) == m_taskList.end())
 			{
@@ -174,7 +195,7 @@ bool ThreadPool::trySchedule(ITask *const task)
 				LOG("Task %p has already been scheduled!", task);
 			}
 
-			MTHREAD_MUTEX_UNLOCK(&m_lock);
+			MTHREAD_MUTEX_UNLOCK(&m_lockTask);
 			return true;
 		}
 		else
@@ -203,14 +224,14 @@ bool ThreadPool::wait(void)
 {
 	try
 	{
-		MTHREAD_MUTEX_LOCK(&m_lock);
+		MTHREAD_MUTEX_LOCK(&m_lockTask);
 
 		while((!m_taskQueue.empty()) || (m_runningTasks > 0))
 		{
-			MTHREAD_COND_WAIT(&m_condAllDone, &m_lock);
+			MTHREAD_COND_WAIT(&m_condAllDone, &m_lockTask);
 		}
 
-		MTHREAD_MUTEX_UNLOCK(&m_lock);
+		MTHREAD_MUTEX_UNLOCK(&m_lockTask);
 		return true;
 	}
 	catch(std::exception &e)
@@ -229,17 +250,83 @@ bool ThreadPool::wait(MTHREADPOOL_NS::ITask *const task)
 {
 	try
 	{
-		MTHREAD_MUTEX_LOCK(&m_lock);
+		MTHREAD_MUTEX_LOCK(&m_lockTask);
 		
 		std::unordered_map<ITask*,pthread_cond_t*>::iterator iter = m_taskList.find(task);
 
 		while(iter != m_taskList.end())
 		{
-			MTHREAD_COND_WAIT(iter->second, &m_lock);
+			MTHREAD_COND_WAIT(iter->second, &m_lockTask);
 			iter = m_taskList.find(task);
 		}
 
-		MTHREAD_MUTEX_UNLOCK(&m_lock);
+		MTHREAD_MUTEX_UNLOCK(&m_lockTask);
+		return true;
+	}
+	catch(std::exception &e)
+	{
+		LOG("Exception error: %s", e.what());
+		return false;
+	}
+	catch(...)
+	{
+		LOG("Unknown exception error!");
+		return false;
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Add or remove listener
+///////////////////////////////////////////////////////////////////////////////
+
+bool ThreadPool::addListener(IListener *const listener)
+{
+	try
+	{
+		MTHREAD_MUTEX_LOCK(&m_lockListeners);
+
+		if(m_listeners.find(listener) == m_listeners.end())
+		{
+			m_listeners.insert(listener);
+		}
+		else
+		{
+			LOG("Listener %p already registered!", listener);
+		}
+
+		MTHREAD_MUTEX_UNLOCK(&m_lockListeners);
+		return true;
+	}
+	catch(std::exception &e)
+	{
+		LOG("Exception error: %s", e.what());
+		return false;
+	}
+	catch(...)
+	{
+		LOG("Unknown exception error!");
+		return false;
+	}
+}
+
+bool ThreadPool::removeListener(IListener *const listener)
+{
+	try
+	{
+		MTHREAD_MUTEX_LOCK(&m_lockListeners);
+
+		std::set<IListener*>::iterator iter = m_listeners.find(listener);
+
+		if(iter != m_listeners.end())
+		{
+			m_listeners.erase(iter);
+		}
+		else
+		{
+			LOG("Listener %p not found!", listener);
+		}
+
+		MTHREAD_MUTEX_UNLOCK(&m_lockListeners);
 		return true;
 	}
 	catch(std::exception &e)
@@ -260,76 +347,9 @@ bool ThreadPool::wait(MTHREADPOOL_NS::ITask *const task)
 
 void *ThreadPool::entryPoint(void *arg)
 {
-	ThreadPool *const pool = static_cast<ThreadPool*>(arg);
-
 	try
 	{
-		while(!pool->m_bStopFlag)
-		{
-			ITask *task = NULL;
-
-			// ------------------------------
-			// Fetch Next Task
-			// ------------------------------
-
-			MTHREAD_SEM_WAIT(&pool->m_semUsed);
-			MTHREAD_MUTEX_LOCK(&pool->m_lock);
-
-			if(!pool->m_taskQueue.empty())
-			{
-				task = pool->m_taskQueue.front();
-				pool->m_taskQueue.pop();
-				MTHREAD_SEM_POST(&pool->m_semFree);
-			}
-
-			if(task)
-			{
-				pool->m_runningTasks++;
-			}
-
-			MTHREAD_MUTEX_UNLOCK(&pool->m_lock);
-
-			// ------------------------------
-			// Execute Task
-			// ------------------------------
-
-			if(task && (!pool->m_bStopFlag))
-			{
-				try
-				{
-					task->run();
-				}
-				catch(...)
-				{
-					LOG("Task %p encountered an internal error!", task);
-				}
-			}
-
-			// ------------------------------
-			// Finalize Task
-			// ------------------------------
-
-			if(task)
-			{
-				MTHREAD_MUTEX_LOCK(&pool->m_lock);
-			
-				pool->m_runningTasks--;
-				std::unordered_map<ITask*,pthread_cond_t*>::iterator iter = pool->m_taskList.find(task);
-
-				if(iter != pool->m_taskList.end())
-				{
-					MTHREAD_COND_BROADCAST(iter->second);
-					pool->m_taskList.erase(iter);
-				}
-
-				if(pool->m_runningTasks == 0)
-				{
-					MTHREAD_COND_BROADCAST(&pool->m_condAllDone);
-				}
-
-				MTHREAD_MUTEX_UNLOCK(&pool->m_lock);
-			}
-		}
+		processingLoop(static_cast<ThreadPool*>(arg));
 	}
 	catch(std::exception &e)
 	{
@@ -341,4 +361,96 @@ void *ThreadPool::entryPoint(void *arg)
 	}
 
 	return NULL;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Processing loop
+///////////////////////////////////////////////////////////////////////////////
+
+void ThreadPool::processingLoop(ThreadPool* pool)
+{
+	while(!pool->m_bStopFlag)
+	{
+		ITask *task = fetchNextTask(pool);
+
+		if(task)
+		{
+			notifyListeners(pool, task, false);
+
+			try
+			{
+				task->run();
+			}
+			catch(...)
+			{
+				LOG("Task %p encountered an internal error!", task);
+			}
+
+			notifyListeners(pool, task, true);
+			finalizeTask(pool, task);
+		}
+	}
+}
+
+ITask *ThreadPool::fetchNextTask(MTHREADPOOL_NS::ThreadPool* pool)
+{
+	ITask *task = NULL;
+
+	MTHREAD_SEM_WAIT(&pool->m_semUsed);
+	MTHREAD_MUTEX_LOCK(&pool->m_lockTask);
+
+	if(!(pool->m_taskQueue.empty() || pool->m_bStopFlag))
+	{
+		task = pool->m_taskQueue.front();
+		pool->m_taskQueue.pop();
+		MTHREAD_SEM_POST(&pool->m_semFree);
+	}
+
+	if(task)
+	{
+		pool->m_runningTasks++;
+	}
+
+	MTHREAD_MUTEX_UNLOCK(&pool->m_lockTask);
+	return task;
+}
+
+void ThreadPool::finalizeTask(MTHREADPOOL_NS::ThreadPool* pool, ITask* task)
+{
+	MTHREAD_MUTEX_LOCK(&pool->m_lockTask);
+
+	pool->m_runningTasks--;
+	std::unordered_map<ITask*,pthread_cond_t*>::iterator iter = pool->m_taskList.find(task);
+
+	if(iter != pool->m_taskList.end())
+	{
+		MTHREAD_COND_BROADCAST(iter->second);
+		pool->m_taskList.erase(iter);
+	}
+
+	if(pool->m_runningTasks == 0)
+	{
+		MTHREAD_COND_BROADCAST(&pool->m_condAllDone);
+	}
+
+	MTHREAD_MUTEX_UNLOCK(&pool->m_lockTask);
+}
+
+void ThreadPool::notifyListeners(ThreadPool* pool, ITask* task, const bool &finished)
+{
+	MTHREAD_MUTEX_LOCK(&pool->m_lockListeners);
+
+	for(std::set<IListener*>::iterator iter = pool->m_listeners.begin(); iter != pool->m_listeners.end(); iter++)
+	{
+		if(finished)
+		{
+			(*iter)->taskFinished(task);
+		}
+		else
+		{
+			(*iter)->taskLaunched(task);
+		}
+	}
+
+	MTHREAD_MUTEX_UNLOCK(&pool->m_lockListeners);
 }

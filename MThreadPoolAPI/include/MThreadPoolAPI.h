@@ -1,7 +1,24 @@
 ///////////////////////////////////////////////////////////////////////////////
 // MThreadPool - MuldeR's Thread Pool
-// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>
-// All rights reserved.
+// Copyright (C) 2014 LoRd_MuldeR <MuldeR2@GMX.de>. All rights reserved.
+// http://www.muldersoft.com/
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version, but always including the *additional*
+// restrictions defined in the "License.txt" file.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+// http://www.gnu.org/licenses/gpl-2.0.txt
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifndef MTHREADPOOL_INCLUDED
@@ -41,6 +58,16 @@ namespace MTHREADPOOL_NS
 		virtual void run(void) = 0; // <-- Must be implemented in user code!
 	};
 
+	class MTHREADPOOL_DLL IListener
+	{
+	public:
+		IListener(void) {}
+		virtual ~IListener(void) {}
+
+		virtual void taskLaunched(MTHREADPOOL_NS::ITask *const task) = 0; // <-- Must be implemented in user code!
+		virtual void taskFinished(MTHREADPOOL_NS::ITask *const task) = 0; // <-- Must be implemented in user code!
+	};
+
 	class MTHREADPOOL_DLL IPool
 	{
 	public:
@@ -52,6 +79,9 @@ namespace MTHREADPOOL_NS
 
 		virtual bool wait(void) = 0;
 		virtual bool wait(MTHREADPOOL_NS::ITask *const task) = 0;
+
+		virtual bool addListener(MTHREADPOOL_NS::IListener *const listener) = 0;
+		virtual bool removeListener(MTHREADPOOL_NS::IListener *const listener) = 0;
 	};
 }
 
